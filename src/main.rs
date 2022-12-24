@@ -20,39 +20,37 @@ fn unsplit(header: &str, body: &str) -> String {
     s
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let drifting_from_deck = match std::env::args().nth(1).as_deref() {
         Some("from-deck") => true,
         Some("to-deck") => false,
-        _ => panic!(),
+        _ => anyhow::bail!("must specify from-deck or to-deck"),
     };
 
-    let scale_save = std::fs::read_to_string(SCALE_SAVE_PATH).unwrap();
+    let scale_save = std::fs::read_to_string(SCALE_SAVE_PATH)?;
     let nyami_nyami_save = std::process::Command::new("ssh")
         .arg("nyami-nyami")
         .args(["cat", NYAMI_NYAMI_SAVE_PATH])
-        .output()
-        .unwrap()
+        .output()?
         .stdout;
 
-    let nyami_nyami_save = String::from_utf8(nyami_nyami_save).unwrap();
+    let nyami_nyami_save = String::from_utf8(nyami_nyami_save)?;
 
     let (scale_header, scale_body) = split(&scale_save);
     let (nyami_nyami_header, nyami_nyami_body) = split(&nyami_nyami_save);
 
     if drifting_from_deck {
         let reconstructed = unsplit(scale_header, nyami_nyami_body);
-        std::fs::write(SCALE_SAVE_PATH, reconstructed.as_bytes()).unwrap();
+        std::fs::write(SCALE_SAVE_PATH, reconstructed.as_bytes())?;
     } else {
         let reconstructed = unsplit(nyami_nyami_header, scale_body);
         std::process::Command::new("ssh")
             .arg("nyami-nyami")
             .args(["echo", &reconstructed, ">", NYAMI_NYAMI_SAVE_PATH])
-            .spawn()
-            .unwrap()
-            .wait()
-            .unwrap()
-            .exit_ok()
-            .unwrap();
+            .spawn()?
+            .wait()?
+            .exit_ok()?;
     }
+
+    Ok(())
 }
