@@ -1,9 +1,9 @@
 #![feature(exit_status_error)]
 
-const SCALE_SAVE_PATH: &str =
-    "/mnt/c/Users/Andrew/AppData/Local/HyperLightDrifter/HyperLight_RecordOfTheDrifter_0.sav";
+use std::{path::Path, process::Command};
 
-const NYAMI_NYAMI_SAVE_PATH: &str = "/home/deck/HLD/HyperLight_RecordOfTheDrifter_0.sav";
+const SCALE_SAVE_DIR: &str = "/mnt/c/Users/Andrew/AppData/Local/HyperLightDrifter";
+const NYAMI_NYAMI_SAVE_DIR: &str = "/home/deck/HLD";
 
 fn split(save_file: &str) -> (&str, &str) {
     let (a, b) = save_file.split_once("eyAi").unwrap();
@@ -21,16 +21,31 @@ fn unsplit(header: &str, body: &str) -> String {
 }
 
 fn main() -> anyhow::Result<()> {
-    let drifting_from_deck = match std::env::args().nth(1).as_deref() {
+    let from_deck = match std::env::args().nth(1).as_deref() {
         Some("from-deck") => true,
         Some("to-deck") => false,
         _ => anyhow::bail!("must specify from-deck or to-deck"),
     };
 
-    let scale_save = std::fs::read_to_string(SCALE_SAVE_PATH)?;
-    let nyami_nyami_save = std::process::Command::new("ssh")
+    transfer("HyperLight_RecordOfTheDrifter_0.sav", from_deck)?;
+    transfer("HyperLight_RecordOfTheDrifter__Hoardes_0.sav", from_deck)?;
+
+    Ok(())
+}
+
+fn transfer(filename: &str, drifting_from_deck: bool) -> anyhow::Result<()> {
+    let scale_save_path = Path::new(SCALE_SAVE_DIR).join(filename);
+    let nyami_nyami_save_path = Path::new(NYAMI_NYAMI_SAVE_DIR)
+        .join(filename)
+        .into_os_string()
+        .into_string()
+        .unwrap();
+
+    let scale_save = std::fs::read_to_string(&scale_save_path)?;
+
+    let nyami_nyami_save = Command::new("ssh")
         .arg("nyami-nyami")
-        .args(["cat", NYAMI_NYAMI_SAVE_PATH])
+        .args(["cat", &nyami_nyami_save_path])
         .output()?
         .stdout;
 
@@ -41,12 +56,12 @@ fn main() -> anyhow::Result<()> {
 
     if drifting_from_deck {
         let reconstructed = unsplit(scale_header, nyami_nyami_body);
-        std::fs::write(SCALE_SAVE_PATH, reconstructed.as_bytes())?;
+        std::fs::write(scale_save_path, reconstructed.as_bytes())?;
     } else {
         let reconstructed = unsplit(nyami_nyami_header, scale_body);
-        std::process::Command::new("ssh")
+        Command::new("ssh")
             .arg("nyami-nyami")
-            .args(["echo", &reconstructed, ">", NYAMI_NYAMI_SAVE_PATH])
+            .args(["echo", &reconstructed, ">", &nyami_nyami_save_path])
             .spawn()?
             .wait()?
             .exit_ok()?;
